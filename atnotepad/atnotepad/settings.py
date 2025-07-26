@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "corsheaders",
 
     'rest_framework',
+    'channels',
     'users',
     'notebook',
 ]
@@ -74,6 +75,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'atnotepad.wsgi.application'
+ASGI_APPLICATION = 'atnotepad.asgi.application'
 
 
 # Database
@@ -146,3 +148,12 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "Authorization",
 ]
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)], 
+        },
+    },
+}
