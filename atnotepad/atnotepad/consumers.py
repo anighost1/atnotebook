@@ -4,6 +4,8 @@ from urllib.parse import parse_qs
 from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from channels.db import database_sync_to_async
+from asgiref.sync import sync_to_async
+from .redis_client import set_notebook_content, get_notebook_content, delete_notebook_content
 
 connected_users = {}
 
@@ -16,6 +18,7 @@ class MyWebSocketConsumer(AsyncJsonWebsocketConsumer):
 
         self.room_name = f"notebook_{notebook_id}"
         self.room_group_name = f"collab_{self.room_name}"
+        self.notebook_id = notebook_id
 
         if token and notebook_id:
             try:
@@ -36,6 +39,12 @@ class MyWebSocketConsumer(AsyncJsonWebsocketConsumer):
 
                 await self.accept()
 
+                notebook_data = await self.get_notebook_data(notebook_id)
+                await self.send_json({
+                    "type": "notebook_data",
+                    "notebook": notebook_data
+                })
+
                 await self.channel_layer.group_send(
                     self.room_group_name,
                     {
@@ -55,30 +64,67 @@ class MyWebSocketConsumer(AsyncJsonWebsocketConsumer):
         User = get_user_model()
         return User.objects.get(id=user_id)
 
-    async def receive(self, text_data):
-        # Broadcast to group
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                "type": "broadcast_message",
-                "message": text_data,
-                "user": self.scope["user"].username,
-            }
-        )
+    @database_sync_to_async
+    def get_notebook_data(self, notebook_id):
+        from notebook.models import Notebook
+        from notebook.serializers import NotebookSerializer
+        try:
+            notebook = Notebook.objects.get(pk=notebook_id)
+            return NotebookSerializer(notebook).data
+        except Notebook.DoesNotExist:
+            return None
 
-    async def broadcast_message(self, event):
-        await self.send_json({
-            "message": event["message"],
-            "from": event["user"]
-        })
+    async def receive(self, text_data):
+        data = json.loads(text_data)
+        if data.get("type") == "update_notebook":
+            content = data.get("content")
+            await sync_to_async(set_notebook_content)(self.notebook_id, content)
+
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "broadcast_notebook_update",
+                    "content": content,
+                    "user": self.scope["user"].username,
+                }
+            )
+
+        # async def broadcast_message(self, event):
+        #     await self.send_json({
+        #         "message": event["message"],
+        #         "from": event["user"]
+        #     })
+
+    # @sync_to_async
+    # def get_content_from_redis(notebook_id):
+    #     from django_redis import get_redis_connection
+    #     redis = get_redis_connection("default")
+    #     key = f"notebook:{notebook_id}:content"
+    #     return redis.get(key)
+
+    @staticmethod
+    @sync_to_async
+    def save_content_to_db(notebook_id, content):
+        from notebook.models import Notebook 
+        try:
+            notebook = Notebook.objects.get(pk=notebook_id)
+            notebook.content = content
+            notebook.save()
+        except Notebook.DoesNotExist:
+            pass
 
     async def disconnect(self, close_code):
         username = getattr(self.scope["user"], "username", None)
 
+        content = await sync_to_async(get_notebook_content)(self.notebook_id)
+        if content:
+            await self.save_content_to_db(self.notebook_id, content)
+
+            await sync_to_async(delete_notebook_content)(self.notebook_id)
+
         if username and self.room_group_name in connected_users:
             connected_users[self.room_group_name].discard(username)
 
-            # Broadcast updated user list
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -87,7 +133,6 @@ class MyWebSocketConsumer(AsyncJsonWebsocketConsumer):
                 }
             )
 
-            # Clean up empty groups
             if not connected_users[self.room_group_name]:
                 del connected_users[self.room_group_name]
 
@@ -100,4 +145,11 @@ class MyWebSocketConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             "type": "user_list",
             "users": event["users"]
+        })
+
+    async def broadcast_notebook_update(self, event):
+        await self.send_json({
+            "type": "notebook_update",
+            "user": event["user"],
+            "content": event["content"]
         })
