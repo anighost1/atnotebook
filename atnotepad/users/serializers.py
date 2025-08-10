@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile
+from .models import UserProfile, FriendList
+from django.db.models import Q
+from rest_framework.exceptions import PermissionDenied
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -38,3 +40,50 @@ class UserWithProfileSerializer(serializers.ModelSerializer):
         rep = super().to_representation(instance)
         rep['profile'] = UserProfileSerializer(instance.profile).data
         return rep
+
+
+class SimpleUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'email']
+
+
+class FriendListSerializer(serializers.ModelSerializer):
+    user = SimpleUserSerializer(read_only=True)
+    friend = SimpleUserSerializer(read_only=True)
+
+    class Meta:
+        model = FriendList
+        fields = ['id', 'user', 'friend', 'status', 'created_at']
+
+    def validate(self, attrs):
+        request_user = self.context['request'].user
+        friend = attrs.get('friend')
+
+        if request_user == friend:
+            raise serializers.ValidationError(
+                "You cannot be friends with yourself.")
+
+        if FriendList.objects.filter(user=request_user, friend=friend).exists() or \
+           FriendList.objects.filter(user=friend, friend=request_user).exists():
+            raise serializers.ValidationError(
+                "This friendship already exists.")
+
+        return attrs
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        request = self.context.get('request')
+        user = request.user
+
+        if instance.friend != user:
+            raise PermissionDenied(
+                "You are not allowed to perform this action.")
+
+        status = validated_data.get('status', instance.status)
+        instance.status = status
+        instance.save()
+        return instance
