@@ -51,9 +51,13 @@ class FriendList(models.Model):
                 fields=["user", "friend"], name="unique_friendship")
         ]
 
+    # def clean(self):
+    #     if self.user == self.friend:
+    #         raise ValidationError("Cannot be friends with yourself.")
     def clean(self):
-        if self.user == self.friend:
-            raise ValidationError("Cannot be friends with yourself.")
+        if self.user_id is not None and self.friend_id is not None:
+            if self.user_id == self.friend_id:
+                raise ValidationError("Cannot be friends with yourself.")
 
     def save(self, *args, **kwargs):
         self.full_clean()

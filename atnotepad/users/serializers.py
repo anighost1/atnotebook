@@ -51,10 +51,15 @@ class SimpleUserSerializer(serializers.ModelSerializer):
 class FriendListSerializer(serializers.ModelSerializer):
     user = SimpleUserSerializer(read_only=True)
     friend = SimpleUserSerializer(read_only=True)
+    friend_id = serializers.PrimaryKeyRelatedField(
+        source='friend',
+        queryset=User.objects.all(),
+        write_only=True
+    )
 
     class Meta:
         model = FriendList
-        fields = ['id', 'user', 'friend', 'status', 'created_at']
+        fields = ['id', 'user', 'friend', 'friend_id', 'status', 'created_at']
 
     def validate(self, attrs):
         request_user = self.context['request'].user
