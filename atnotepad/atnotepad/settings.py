@@ -29,7 +29,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'localhost',
     '192.168.29.38',
-    '192.168.29.188'
+    '192.168.29.188',
+    'server.tigga.in'
 ]
 
 
