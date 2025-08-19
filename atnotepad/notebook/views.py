@@ -11,13 +11,19 @@ class NotebookViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        for_self = self.request.query_params.get("forSelf", "true").lower() == "true" # pyright: ignore[reportAttributeAccessIssue]
+        for_collab = self.request.query_params.get("forCollab", "false").lower() == "true" # pyright: ignore[reportAttributeAccessIssue]
 
         if user.is_staff or user.is_superuser:
             return Notebook.objects.all()
 
-        return Notebook.objects.filter(
-            Q(owner=user) | Q(collaborators__user=user)
-        ).distinct()
+        q_filter = Q()
+        if for_self:
+            q_filter |= Q(owner=user)
+        if for_collab:
+            q_filter |= Q(collaborators__user=user)
+
+        return Notebook.objects.filter(q_filter).distinct()
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
@@ -69,10 +75,12 @@ class NotebookCollaboratorViewSet(viewsets.ModelViewSet):
         request_user = self.request.user
 
         if notebook.owner != request_user and not request_user.is_staff and not request_user.is_superuser:
-            raise PermissionDenied("Only the notebook owner or an admin can add collaborators.")
+            raise PermissionDenied(
+                "Only the notebook owner or an admin can add collaborators.")
 
         if collaborator_to_add == notebook.owner:
-            raise serializer.ValidationError("Notebook owner doesn't need to be added as a collaborator.")
+            raise serializer.ValidationError(
+                "Notebook owner doesn't need to be added as a collaborator.")
 
         serializer.save()
 

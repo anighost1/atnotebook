@@ -26,7 +26,10 @@ SECRET_KEY = 'django-insecure-58p3%qf6!@ak$jud$re576asu9s)_wlx12dpp3)#u#e!%3-zy@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '192.168.29.38'
+]
 
 
 # Application definition
@@ -41,6 +44,7 @@ INSTALLED_APPS = [
     "corsheaders",
 
     'rest_framework',
+    'channels',
     'users',
     'notebook',
 ]
@@ -74,6 +78,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'atnotepad.wsgi.application'
+ASGI_APPLICATION = 'atnotepad.asgi.application'
 
 
 # Database
@@ -146,3 +151,12 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "Authorization",
 ]
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)], 
+        },
+    },
+}

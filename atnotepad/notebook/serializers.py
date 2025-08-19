@@ -8,10 +8,11 @@ User = get_user_model()
 class NotebookSerializer(serializers.ModelSerializer):
     owner = serializers.StringRelatedField(read_only=True)
     collaborators = serializers.SerializerMethodField()
+    owner_id = serializers.IntegerField(source="owner.id", read_only=True)
 
     class Meta:
         model = Notebook
-        fields = ['id', 'title', 'content', 'owner',
+        fields = ['id', 'title', 'content', 'owner', 'owner_id',
                   'created_at', 'updated_at', 'collaborators']
 
     def get_collaborators(self, obj):
